@@ -2,6 +2,7 @@ from QuantLib import *
 import numpy as np
 import pandas as pd
 import collections
+import utils
 
 class Loan:
     def __init__(self, rate_type, amortizing_type, original_principal_balance, principal_balance, issue_date,
@@ -48,11 +49,12 @@ class Loan:
         self.beginning_notional_principal_balance = []
         self.ending_principal_balance = []
         self.beginning_principal_balance = []
+        self.cashflow_available_to_pay_liabilities = []
         self.beginning_notional_principal_balance.append(0)
         self.beginning_principal_balance.append(0)
         self.ending_notional_principal_balance.append(self.current_principal_balance)
         self.ending_principal_balance.append(self.current_principal_balance)
-        self.cashflow_available_to_pay_liabilities = []
+
 
         my_per = int(self.get_original_term() * self.tenor.frequency())
         for i, date in enumerate(list(self.schedule)):
@@ -204,7 +206,7 @@ class Loan:
         i = 0
         sum_cf = 0
         sch_dates = list(self.schedule)[1:]
-        while  sch_dates[i] <= dt:
+        while sch_dates[i] <= dt:
             sum_cf = sum_cf + cf[i].amount()
             i += 1
         return sum_cf
@@ -218,14 +220,91 @@ class Loan:
         [cf_list.append(c.amount()) for c in cf]
         return cf_list
 
-    def show_cashflow(self):
+    def show_cashflow(self, prnt=True):
         df = pd.DataFrame(self.cashflow_dictionary)
-        print(df)
+        df['date'] = df['date'].apply(utils.ql_to_date, 1)
+        df.set_index('date', inplace=True)
+        if prnt:
+            print(df)
+        return df
 
 class Loans:
     def __init__(self, name, positions):
         self.name = name
         self.positions = positions
+        self.notional_cashflow_interest = []
+        self.notional_cashflow_principal_amortization = []
+        self.notional_cashflow = []
+        self.cashflow_interest = []
+        self.cashflow_principal_amortization = []
+        self.cashflow_defaults = []
+        self.cashflow_prepayments = []
+        self.cashflow_principal_recovery = []
+        self.cashflow = []
+        self.ending_notional_principal_balance = []
+        self.beginning_notional_principal_balance = []
+        self.ending_principal_balance = []
+        self.beginning_principal_balance = []
+        self.cashflow_available_to_pay_liabilities = []
+        self.schedule_dates = []
+
+        for pos in self.positions:
+            self.schedule_dates.append(pos.issue_date)
+            self.notional_cashflow_interest = self.notional_cashflow_interest + pos.notional_cashflow_interest
+            self.notional_cashflow_principal_amortization = self.notional_cashflow_principal_amortization +\
+                                                            pos.notional_cashflow_principal_amortization
+            self.notional_cashflow = self.notional_cashflow + pos.notional_cashflow
+            self.cashflow_interest = self.cashflow_interest + pos.cashflow_interest
+            self.cashflow_principal_amortization = self.cashflow_principal_amortization +\
+                                                   pos.cashflow_principal_amortization
+            self.cashflow_defaults = self.cashflow_defaults + pos.cashflow_defaults
+            self.cashflow_prepayments = self.cashflow_prepayments + pos.cashflow_prepayments
+            self.cashflow_principal_recovery = self.cashflow_principal_recovery + pos.cashflow_principal_recovery
+            self.cashflow = self.cashflow + pos.cashflow
+            self.beginning_notional_principal_balance = self.beginning_notional_principal_balance +\
+                                                        pos.beginning_notional_principal_balance
+            self.ending_notional_principal_balance = self.ending_notional_principal_balance + \
+                                                        pos.ending_notional_principal_balance
+            self.beginning_principal_balance = self.beginning_principal_balance + \
+                                                        pos.beginning_principal_balance
+            self.ending_principal_balance = self.ending_principal_balance + \
+                                                     pos.ending_principal_balance
+
+        for cf in self.cashflow:
+            self.schedule_dates.append(cf.date())
+
+
+        self.schedule_dates = list(set(self.schedule_dates))
+
+        self.cashflow_dictionary = collections.OrderedDict([
+            ("date",
+             self.schedule_dates),
+            ("beginning notional balance",
+             self.beginning_notional_principal_balance),
+            ("notional interest",
+             self.translate_cashflow_to_list(self.notional_cashflow_interest)),
+            ("notional principal amortization",
+             self.translate_cashflow_to_list(self.notional_cashflow_principal_amortization)),
+            ("ending notional balance",
+             self.ending_notional_principal_balance),
+            ("beginning balance",
+             self.beginning_principal_balance),
+            ("defaults",
+             self.translate_cashflow_to_list(self.cashflow_defaults)),
+            ("prepayments",
+             self.translate_cashflow_to_list(self.cashflow_prepayments)),
+            ("principal amortization",
+             self.translate_cashflow_to_list(self.cashflow_principal_amortization)),
+            ("interest",
+             self.translate_cashflow_to_list(self.cashflow_interest)),
+            ("principal recovery",
+             self.translate_cashflow_to_list(self.cashflow_principal_recovery)),
+            ("ending balance",
+             self.ending_principal_balance)#,
+            #("cash available to pay liabilities",
+            # self.translate_cashflow_to_list(self.cash_flow_available_to_pay_liabilities())
+            # )
+        ])
 
     def representative_loan(self):
         sum_principal_balance = 0
@@ -238,3 +317,16 @@ class Loans:
         weighted_avg_rate = weighted_avg_rate / sum_principal_balance
         weighted_avg_term = weighted_avg_term / sum_principal_balance
         return Loan(sum_principal_balance, weighted_avg_rate, weighted_avg_term)
+
+    def show_cashflow(self, prnt=True):
+        df = pd.DataFrame(self.cashflow_dictionary)
+        df['date'] = df['date'].apply(utils.ql_to_date, 1)
+        df.set_index('date', inplace=True)
+        if prnt:
+            print(df)
+        return df
+
+    def translate_cashflow_to_list(self, cf):
+        cf_list = [0]
+        [cf_list.append(c.amount()) for c in cf]
+        return cf_list
